@@ -105,6 +105,42 @@ needed, not a different image tag.
   on restart. Here Redis holds cache and session state while Postgres is the system of record, so
   the blast radius is sessions, not learner data.
 
+## Two traps, both the same shape
+
+Each of these is an edit that **succeeds, reports success, and silently leaves the wrong value in
+place**. Neither surfaces as an error. Check both explicitly on any rerun.
+
+### `.env.example` has duplicate keys
+
+`LLM_PROVIDER=ollama`, `TTS_PROVIDER=local` and `STT_PROVIDER=local` each appear **twice** in
+`.env.example`: once as the real assignment, once inside an explanatory comment just above it
+(lines 46/51, 74/71, 84/81). A `sed s/LLM_PROVIDER=ollama/.../` edits whichever it reaches first
+and can leave the app pointed at Ollama while the diff looks right.
+
+Anchor every substitution to the start of a line, and assert exactly one match before writing.
+Afterwards verify the values that matter:
+
+```bash
+grep -E '^(LLM_PROVIDER|TTS_PROVIDER|STT_PROVIDER)=' .env
+```
+
+### Compose appends port lists, it does not replace them
+
+`docker-compose.override.yml` remaps the frontend to loopback, but Compose **merges `ports` by
+appending**. Without the `!override` tag the result is upstream's `0.0.0.0:3000` *and* the loopback
+mapping — the stack comes up, the app works, and the public binding this host must never have is
+quietly live.
+
+This is the single security-relevant assumption in the setup that has not been exercised, because
+Compose was not installed when the override was written. **Verify it before the first `up`:**
+
+```bash
+docker compose -p freelingo config | grep -A4 'ports:'
+```
+
+Every published port must begin `127.0.0.1:`. If any entry lacks it, stop — do not start the stack
+and do not add the Caddy site.
+
 ## Executed steps
 
 ### 1. Fork, clone, remotes
