@@ -1,0 +1,31 @@
+# docker-compose.override.yml — this deployment only, never upstreamed.
+#
+# Compose loads this automatically alongside docker-compose.yml. Keeping local
+# deployment settings here rather than editing docker-compose.yml is what keeps the
+# monthly upstream rebase clean (see SPEC.md item 1).
+#
+# Why these ports: upstream publishes "3000:3000", which binds every interface. This
+# host is behind Caddy on a public hostname and nothing may listen on 0.0.0.0, so both
+# services are republished on loopback only, on ports that follow the local 8000-8800
+# convention (see DEPLOY.md).
+#
+# The backend is published solely so Caddy can reach /ws/conversation: Next.js does not
+# proxy WebSocket upgrades, so that route cannot go through the frontend. Every other
+# backend call still goes frontend -> backend over the internal compose network.
+#
+# The kokoro and whisper services are NOT configured here. They declare NVIDIA GPU
+# reservations and this host has no GPU, so they are simply never started — TTS_PROVIDER
+# and STT_PROVIDER are both set to "openai" in .env. Nothing depends_on them, and their
+# only other role is supplying the default TTS_BASE_URL / STT_BASE_URL, which are unused
+# when the providers are OpenAI. Start the stack by naming the services you want:
+#
+#     docker compose -p freelingo up -d postgres redis backend frontend
+
+services:
+  frontend:
+    ports: !override
+      - "127.0.0.1:8420:3000"
+
+  backend:
+    ports:
+      - "127.0.0.1:8421:8000"

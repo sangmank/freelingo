@@ -29,29 +29,39 @@ This fork tracks upstream and is rebased on it **monthly**. Everything else foll
 
 ## This machine's deployment
 
-**It is not running yet.** `DEPLOY.md` records what was done, what is blocked and on what. Do not
-assume a live stack. The summary below is the intended shape.
+**It is not running yet.** `DEPLOY.md` is the authority: it records what was done, what is
+pending and why. Do not assume a live stack.
 
 - Repo and deployment root: `/home/sangmank/projects/freelingo`, owned `sangmank:sangmank`.
-- Runs as a Docker Compose stack, project name `freelingo`.
+- Docker Compose stack, project name `freelingo`. Compose itself is not yet installed on the host.
+- Start only the four services the host can run:
+  `docker compose -p freelingo up -d postgres redis backend frontend`. A bare `up -d` would also
+  start `kokoro` and `whisper`, which reserve NVIDIA GPUs this machine does not have.
 - Ports, loopback only, never `0.0.0.0`: `127.0.0.1:8420` frontend, `127.0.0.1:8421` backend. The
-  backend port exists only so Caddy can reach the WebSocket; everything else goes through the
-  frontend.
-- Caddy site file: `/etc/caddy/freelingo.caddyfile`, imported by one line in `/etc/caddy/Caddyfile`.
-  It routes `/ws/*` to the backend, because Next.js does not proxy WebSocket upgrades.
-- Reload: `sudo caddy validate --config /etc/caddy/Caddyfile` then
-  `sudo systemctl reload caddy`. **Graceful reload only, never a restart**, and never the admin API
-  on port 2019 — a `POST /load` there silently replaces the whole configuration and drops every
-  other site on the host.
-- Access lock-down: the app's own `ALLOW_REGISTRATION=false` in `.env`, set after the admin account
-  exists. There is no edge-level gate, matching the other self-authenticating sites on this host
-  (`ourtube`, `remod`, `nyquist`). Other sites here use mTLS instead because they have no login of
-  their own.
-- Host constraints worth knowing: no NVIDIA GPU, so Kokoro and Whisper run from CPU images and voice
-  is slow; Redis wants `vm.overcommit_memory=1` on the host.
+  backend port exists only so Caddy can reach `/ws/conversation`; Next.js does not proxy WebSocket
+  upgrades. Everything else goes frontend to backend over the compose network. The `!override` tag
+  on the frontend's `ports` in `docker-compose.override.yml` is load-bearing — without it Compose
+  appends to upstream's list and leaves `0.0.0.0:3000` bound.
+- **No provider keys are configured.** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are present but
+  empty, on purpose, so the plumbing could be proven first. The tutor and voice features fail until
+  they are filled in; that is expected, not a bug.
+- Speech is configured for OpenAI TTS/STT rather than the bundled Kokoro and faster-whisper,
+  because the host has no GPU.
+- Caddy site file: canonical copy at `deploy/freelingo.caddyfile` in this repo, installed to
+  `/etc/caddy/freelingo.caddyfile` and imported by one line in `/etc/caddy/Caddyfile`. Not yet
+  installed — it waits on DNS for `freelingo.solsee.com`.
+- Reload: `sudo caddy validate --config /etc/caddy/Caddyfile`, then `sudo systemctl reload caddy`.
+  **Graceful reload only, never a restart**, and never the admin API on port 2019 — a `POST /load`
+  there silently replaces the whole configuration and drops every other site on the host.
+- Access lock-down: the app's own `ALLOW_REGISTRATION=false` in `.env`, set once the admin account
+  exists. No edge gate, matching the other self-authenticating sites here (`ourtube`, `remod`,
+  `nyquist`). Other sites use mTLS instead because they have no login of their own.
+- Known deviation: `vm.overcommit_memory` stays at `0`, though upstream asks for `1`. Declined as a
+  host-wide change. Redis still runs; the risk is a failed background save under memory pressure.
 
-Read `/etc/caddy/README_AGENTS.md` before touching Caddy. Its house IP is stale — the current one is
-`98.207.230.73`.
+Read `/etc/caddy/README_AGENTS.md` before touching Caddy. Its reasoning is sound but two facts are
+stale: the house IP is `98.207.230.73`, not the `98.210.42.172` it gives, and its port list is out
+of date.
 
 ## Shared state on this host
 

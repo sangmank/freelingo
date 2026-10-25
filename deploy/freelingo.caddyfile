@@ -1,0 +1,32 @@
+# /etc/caddy/freelingo.caddyfile — imported from /etc/caddy/Caddyfile
+# (see /etc/caddy/README_AGENTS.md)
+#
+# Canonical copy lives in this repo at deploy/freelingo.caddyfile; install it by
+# copying to /etc/caddy/ and adding one `import freelingo.caddyfile` line.
+#
+# No port in the site address, and no `tls` directive: the global block moves the
+# listeners to 8443/8480 and rewires the ACME challenges to match, and staying out of
+# `tls` leaves the climux.solsee.com client-certificate policy untouched.
+
+freelingo.solsee.com {
+	encode zstd gzip
+
+	# FreeLingo authenticates every request itself: the backend enforces access on every
+	# call and the frontend's route guards are navigation aids only (upstream AGENTS.md).
+	# Public sign-up is closed in the app's own config with ALLOW_REGISTRATION=false, so
+	# there is no edge-level gate standing in for the app. Same shape as ourtube and remod.
+
+	# Next.js does not proxy WebSocket upgrades, so /ws/* must reach the backend directly
+	# rather than through the frontend (upstream README, "Reverse proxy requirement").
+	handle /ws/* {
+		reverse_proxy 127.0.0.1:8421
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8420 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
