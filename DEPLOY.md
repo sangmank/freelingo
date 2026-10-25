@@ -77,6 +77,26 @@ image tags that upstream warns "are not a stable FreeLingo contract".
 Note for the SPEC direction on multilingual TTS: Kokoro's bundled voices are English-only, so local
 TTS would not have served a non-English target language regardless of GPU.
 
+### If anyone revisits local speech
+
+Two findings worth not rediscovering, both checked against the registries on 2026-10-25:
+
+- Upstream's compose comment says "CPU-only host: use `:cpu-latest`". **No such tag exists** on
+  either Kokoro repo. The GPU repo `ghcr.io/remsky/kokoro-fastapi-gpu` publishes only `latest`,
+  `latest-cu126`, `latest-cu128` (plus arch variants). The CPU build is a *separate repo*,
+  `ghcr.io/remsky/kokoro-fastapi-cpu`, with tags `latest`, `latest-slim`, `latest-amd64`,
+  `latest-arm64`. So the correct CPU image is `ghcr.io/remsky/kokoro-fastapi-cpu:latest`. This is
+  consistent with upstream's own disclaimer that CPU tags "are not a stable FreeLingo contract".
+- Whisper's CPU image is straightforward: `onerahmet/openai-whisper-asr-webservice:latest` (the
+  `-gpu` suffix marks the GPU builds), with `ASR_MODEL=base` or `small`.
+
+Dropping the GPU reservation from an override file would need Compose's `!reset` or `!override`
+tag; that path was never exercised here and is unverified.
+
+And the reason not to bother: Kokoro's voices are English-only, so local TTS cannot serve the
+fork's multilingual-TTS direction (SPEC item 3) whatever the hardware. A different engine is
+needed, not a different image tag.
+
 ## Known deviations from upstream guidance
 
 - **`vm.overcommit_memory` is left at `0`.** Upstream asks for `1`. This was explicitly declined as
